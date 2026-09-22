@@ -29,6 +29,8 @@ Runtime: Node.js >= 24.21.0, npm >= 11.19.1.
 - Alternative web frameworks (Fastify, Koa, NestJS, Hapi).
 - Alternative ODM/ORMs or the raw `mongodb` driver. Database access goes through
   Mongoose only.
+- Redundant middleware packages. Use `express.json()` and
+  `express.urlencoded()`, not `body-parser`.
 - Utility grab-bags (`lodash`, `underscore`, `moment`). Use native JS/TS,
   `Intl`, and `Date`.
 - Adding *any* new package without first stating the package name, why it is
@@ -90,6 +92,8 @@ Additional rules:
   `.env-example`.
 - Use `const` by default, named exports over default exports, and
   `camelCase` for values / `PascalCase` for types and classes.
+- Unused-by-design parameters (Express middleware signatures) are prefixed with
+  `_`. Do not delete them to satisfy the linter.
 - File naming: `<name>.routes.ts`, `<name>.controller.ts`, `<name>.service.ts`,
   `<name>.model.ts`.
 - No `console.log` in committed code paths other than `server.ts` startup
@@ -118,3 +122,45 @@ Additional rules:
 - Do not create files outside the layout in §2.
 - Do not refactor unrelated files "while you're in there."
 - Keep changes minimal and reviewable; prefer the smallest diff that works.
+
+---
+
+## Appendix A — Boundary Verification Log (Lab 1, Part 3)
+
+Verification prompt issued to the agent:
+
+> Generate a initial Express server file (src/app.ts) and a baseline
+> health-check endpoint (GET /api/v1/health).
+
+### Compliance review of generated output
+
+| Lab check | Result | Evidence |
+|---|---|---|
+| Strict TypeScript typing? | Pass | `tsc --noEmit` clean under `strict`. No `any`, no `@ts-ignore`. All exported functions carry explicit parameter and return types. `HealthReport` interface defined in `types/`. |
+| Designated directory layout? | Pass | Route in `routes/health.routes.ts`, HTTP handling in `controllers/health.controller.ts`, logic in `services/health.service.ts`, shared types in `types/`. `app.ts` assembles only; `app.listen()` isolated to `server.ts`. |
+| No forbidden deps / no inline logic in routes? | Pass | Only `express` and `dotenv` imported at runtime. No `body-parser` or `cors` — native `express.json()` used instead. `health.routes.ts` declares the verb and delegates; it holds zero logic. |
+| Async error handling? | Pass | Controller wraps `await` in `try/catch` and forwards via `next(error)`. Central `errorHandler` registered last in `app.ts`. No floating `.then()` chains. |
+
+Runtime verification: `GET /api/v1/health` returned `200` with a JSON body
+containing `service`, `status`, `environment`, `uptimeSeconds`, and
+`timestamp`.
+
+### Corrections made after review
+
+1. **Lint config contradicted §3.** ESLint's default `no-unused-vars` flagged
+   the intentional `_req` / `_next` parameters that Express middleware
+   signatures require, so compliant code failed lint. Added
+   `argsIgnorePattern: '^_'` to align ESLint with `tsconfig`'s
+   `noUnusedParameters` behavior, and recorded the `_` convention in §3.
+2. **`no-console` contradicted §3.** The rule banned all `console.log`, but §3
+   explicitly permits startup messages in `server.ts`. Added a file-scoped
+   override rather than weakening the global rule.
+3. **Added `ban-ts-comment`** so the §3 prohibition on `@ts-ignore` and
+   `@ts-expect-error` is machine-enforced rather than honor-system.
+4. **Tightened §1** to name `body-parser` as forbidden explicitly, since it is
+   the most common unauthorized dependency an agent reaches for when adding
+   request parsing.
+
+Lesson recorded: a rule the toolchain cannot enforce is a rule the agent will
+eventually drift from. Where a constraint in this file can be expressed as a
+compiler or linter setting, it should be.
