@@ -22,6 +22,8 @@ Runtime: Node.js >= 24.21.0, npm >= 11.19.1.
 
 - `ts-node`, `@types/node`, `@types/express`
 - `eslint`, `prettier`, `typescript-eslint`
+- `jest`, `ts-jest`, `@types/jest` — test runner for the CI pipeline (Lab 8);
+  replaces the placeholder `npm test` script
 
 **Forbidden:**
 
