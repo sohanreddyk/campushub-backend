@@ -211,9 +211,18 @@ const callModel = async (messages: ChatMessage[]): Promise<string> => {
     );
   }
 
-  const payload = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
+  const raw = await response.text();
+  let payload: { choices?: { message?: { content?: string } }[] };
+  try {
+    payload = JSON.parse(raw) as {
+      choices?: { message?: { content?: string } }[];
+    };
+  } catch {
+    const contentType = response.headers.get('content-type') ?? 'none';
+    throw new ModelRequestError(
+      `Model endpoint answered HTTP ${response.status} (content-type: ${contentType}) with a non-JSON body: ${clip(raw, 300).replace(/\s+/g, ' ')}`,
+    );
+  }
   const content = payload.choices?.[0]?.message?.content;
 
   if (typeof content !== 'string' || content.length === 0) {
