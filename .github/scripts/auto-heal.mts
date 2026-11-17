@@ -46,6 +46,10 @@ interface ChatMessage {
   content: string;
 }
 
+// An HTTP or network failure talking to the model is not something the model
+// can fix by being asked again, so it stops the run instead of burning attempts.
+class ModelRequestError extends Error {}
+
 const MODEL = process.env.AUTO_HEAL_MODEL ?? 'openai/gpt-4.1';
 const ENDPOINT =
   process.env.AUTO_HEAL_ENDPOINT ??
@@ -183,20 +187,28 @@ const initialPrompt = (
 // ---------------------------------------------------------------------------
 
 const callModel = async (messages: ChatMessage[]): Promise<string> => {
-  const response = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${API_KEY}`,
-      'Content-Type': 'application/json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    body: JSON.stringify({ model: MODEL, messages, temperature: 0 }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0 }),
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new ModelRequestError(`Could not reach ${ENDPOINT}: ${reason}`);
+  }
 
   if (!response.ok) {
-    const detail = clip(await response.text(), 2000);
-    throw new Error(`Model request failed (${response.status}): ${detail}`);
+    const detail = clip(await response.text(), 500).replace(/\s+/g, ' ');
+    throw new ModelRequestError(
+      `Model request (model ${MODEL}) failed with HTTP ${response.status}: ${detail}`,
+    );
   }
 
   const payload = (await response.json()) as {
@@ -478,7 +490,12 @@ const main = async (): Promise<void> => {
         'format. Remember: do not modify tests.';
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`Attempt failed: ${message}`);
+      if (error instanceof ModelRequestError) {
+        console.log('::endgroup::');
+        giveUp(message);
+        return;
+      }
+      console.log(`::warning::Attempt ${attempt} failed: ${message}`);
       feedback =
         `Your last reply could not be used: ${message}\n\n` +
         'Reply again with ONLY the required JSON object.';
