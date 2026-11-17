@@ -13,7 +13,9 @@ export const hasTimeOverlap = (
   startB: Date,
   endB: Date,
 ): boolean => {
-  return startA.getTime() < endB.getTime() && startB.getTime() < endA.getTime();
+  return !(
+    startA.getTime() < endB.getTime() && startB.getTime() < endA.getTime()
+  );
 };
 
 /**
